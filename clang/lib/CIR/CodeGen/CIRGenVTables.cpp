@@ -247,7 +247,7 @@ void CIRGenVTables::addVTableComponent(ConstantArrayBuilder &builder,
 
     mlir::cir::FuncOp fnPtr;
     // Pure virtual member functions.
-    if (cast<CXXMethodDecl>(GD.getDecl())->isPure()) {
+    if (cast<CXXMethodDecl>(GD.getDecl())->isPureVirtual()) {
       llvm_unreachable("NYI");
       // if (!PureVirtualFn)
       //   PureVirtualFn =
