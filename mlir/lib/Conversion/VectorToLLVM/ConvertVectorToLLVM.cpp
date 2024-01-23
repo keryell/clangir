@@ -192,7 +192,9 @@ static void replaceLoadOrStoreOp(vector::LoadOp loadOp,
                                  vector::LoadOpAdaptor adaptor,
                                  VectorType vectorTy, Value ptr, unsigned align,
                                  ConversionPatternRewriter &rewriter) {
-  rewriter.replaceOpWithNewOp<LLVM::LoadOp>(loadOp, vectorTy, ptr, align);
+  rewriter.replaceOpWithNewOp<LLVM::LoadOp>(loadOp, vectorTy, ptr, align,
+                                            /*volatile_=*/false,
+                                            loadOp.getNontemporal());
 }
 
 static void replaceLoadOrStoreOp(vector::MaskedLoadOp loadOp,
@@ -208,7 +210,8 @@ static void replaceLoadOrStoreOp(vector::StoreOp storeOp,
                                  VectorType vectorTy, Value ptr, unsigned align,
                                  ConversionPatternRewriter &rewriter) {
   rewriter.replaceOpWithNewOp<LLVM::StoreOp>(storeOp, adaptor.getValueToStore(),
-                                             ptr, align);
+                                             ptr, align, /*volatile_=*/false,
+                                             storeOp.getNontemporal());
 }
 
 static void replaceLoadOrStoreOp(vector::MaskedStoreOp storeOp,
@@ -221,7 +224,7 @@ static void replaceLoadOrStoreOp(vector::MaskedStoreOp storeOp,
 
 /// Conversion pattern for a vector.load, vector.store, vector.maskedload, and
 /// vector.maskedstore.
-template <class LoadOrStoreOp, class LoadOrStoreOpAdaptor>
+template <class LoadOrStoreOp>
 class VectorLoadStoreConversion : public ConvertOpToLLVMPattern<LoadOrStoreOp> {
 public:
   using ConvertOpToLLVMPattern<LoadOrStoreOp>::ConvertOpToLLVMPattern;
@@ -1742,23 +1745,20 @@ void mlir::populateVectorToLLVMConversionPatterns(
   populateVectorInsertExtractStridedSliceTransforms(patterns);
   patterns.add<VectorReductionOpConversion>(converter, reassociateFPReductions);
   patterns.add<VectorCreateMaskOpRewritePattern>(ctx, force32BitVectorIndices);
-  patterns
-      .add<VectorBitCastOpConversion, VectorShuffleOpConversion,
-           VectorExtractElementOpConversion, VectorExtractOpConversion,
-           VectorFMAOp1DConversion, VectorInsertElementOpConversion,
-           VectorInsertOpConversion, VectorPrintOpConversion,
-           VectorTypeCastOpConversion, VectorScaleOpConversion,
-           VectorLoadStoreConversion<vector::LoadOp, vector::LoadOpAdaptor>,
-           VectorLoadStoreConversion<vector::MaskedLoadOp,
-                                     vector::MaskedLoadOpAdaptor>,
-           VectorLoadStoreConversion<vector::StoreOp, vector::StoreOpAdaptor>,
-           VectorLoadStoreConversion<vector::MaskedStoreOp,
-                                     vector::MaskedStoreOpAdaptor>,
-           VectorGatherOpConversion, VectorScatterOpConversion,
-           VectorExpandLoadOpConversion, VectorCompressStoreOpConversion,
-           VectorSplatOpLowering, VectorSplatNdOpLowering,
-           VectorScalableInsertOpLowering, VectorScalableExtractOpLowering,
-           MaskedReductionOpConversion>(converter);
+  patterns.add<VectorBitCastOpConversion, VectorShuffleOpConversion,
+               VectorExtractElementOpConversion, VectorExtractOpConversion,
+               VectorFMAOp1DConversion, VectorInsertElementOpConversion,
+               VectorInsertOpConversion, VectorPrintOpConversion,
+               VectorTypeCastOpConversion, VectorScaleOpConversion,
+               VectorLoadStoreConversion<vector::LoadOp>,
+               VectorLoadStoreConversion<vector::MaskedLoadOp>,
+               VectorLoadStoreConversion<vector::StoreOp>,
+               VectorLoadStoreConversion<vector::MaskedStoreOp>,
+               VectorGatherOpConversion, VectorScatterOpConversion,
+               VectorExpandLoadOpConversion, VectorCompressStoreOpConversion,
+               VectorSplatOpLowering, VectorSplatNdOpLowering,
+               VectorScalableInsertOpLowering, VectorScalableExtractOpLowering,
+               MaskedReductionOpConversion>(converter);
   // Transfer ops with rank > 1 are handled by VectorToSCF.
   populateVectorTransferLoweringPatterns(patterns, /*maxTransferRank=*/1);
 }

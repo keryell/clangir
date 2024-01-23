@@ -128,11 +128,13 @@ lexical features of LLVM:
 #. Comments are delimited with a '``;``' and go until the end of line.
 #. Unnamed temporaries are created when the result of a computation is
    not assigned to a named value.
-#. Unnamed temporaries are numbered sequentially (using a per-function
-   incrementing counter, starting with 0). Note that basic blocks and unnamed
-   function parameters are included in this numbering. For example, if the
-   entry basic block is not given a label name and all function parameters are
-   named, then it will get number 0.
+#. By default, unnamed temporaries are numbered sequentially (using a
+   per-function incrementing counter, starting with 0). However, when explicitly
+   specifying temporary numbers, it is allowed to skip over numbers.
+
+   Note that basic blocks and unnamed function parameters are included in this
+   numbering. For example, if the entry basic block is not given a label name
+   and all function parameters are named, then it will get number 0.
 
 It also shows a convention that we follow in this document. When
 demonstrating instructions, we will follow an instruction with a comment
@@ -317,8 +319,8 @@ added in the future:
     not be used lightly but only for specific situations such as an
     alternative to the *register pinning* performance technique often
     used when implementing functional programming languages. At the
-    moment only X86 and AArch64 support this convention. The following
-    limitations exist:
+    moment only X86, AArch64, and RISCV support this convention. The 
+    following limitations exist:
 
     -  On *X86-32* only up to 4 bit type parameters are supported. No
        floating-point types are supported.
@@ -327,6 +329,9 @@ added in the future:
     -  On *AArch64* only up to 4 32-bit floating-point parameters,
        4 64-bit floating-point parameters, and 10 bit type parameters
        are supported.
+    -  *RISCV64* only supports up to 11 bit type parameters, 4
+       32-bit floating-point parameters, and 4 64-bit floating-point
+       parameters.
 
     This calling convention supports `tail call
     optimization <CodeGenerator.html#tail-call-optimization>`_ but requires
@@ -5333,6 +5338,8 @@ X86:
   operand in a SSE register. If AVX is also enabled, can also be a 256-bit
   vector operand in an AVX register. If AVX-512 is also enabled, can also be a
   512-bit vector operand in an AVX512 register. Otherwise, an error.
+- ``Ws``: A symbolic reference with an optional constant addend or a label
+  reference.
 - ``x``: The same as ``v``, except that when AVX-512 is enabled, the ``x`` code
   only allocates into the first 16 AVX-512 registers, while the ``v`` code
   allocates into any of the 32 AVX-512 registers.
@@ -5515,6 +5522,7 @@ X86:
   the operand. (The behavior for relocatable symbol expressions is a
   target-specific behavior for this typically target-independent modifier)
 - ``H``: Print a memory reference with additional offset +8.
+- ``p``: Print a raw symbol name (without syntax-specific prefixes).
 - ``P``: Print a memory reference used as the argument of a call instruction or
   used with explicit base reg and index reg as its offset. So it can not use
   additional regs to present the memory reference. (E.g. omit ``(rip)``, even
@@ -10515,9 +10523,10 @@ Atomic loads produce :ref:`defined <memmodel>` results when they may see
 multiple atomic stores. The type of the pointee must be an integer, pointer, or
 floating-point type whose bit width is a power of two greater than or equal to
 eight and less than or equal to a target-specific size limit.  ``align`` must be
-explicitly specified on atomic loads, and the load has undefined behavior if the
-alignment is not set to a value which is at least the size in bytes of the
-pointee. ``!nontemporal`` does not have any defined semantics for atomic loads.
+explicitly specified on atomic loads. Note: if the alignment is not greater or
+equal to the size of the `<value>` type, the atomic operation is likely to
+require a lock and have poor performance. ``!nontemporal`` does not have any
+defined semantics for atomic loads.
 
 The optional constant ``align`` argument specifies the alignment of the
 operation (that is, the alignment of the memory address). It is the
@@ -10655,9 +10664,10 @@ Atomic loads produce :ref:`defined <memmodel>` results when they may see
 multiple atomic stores. The type of the pointee must be an integer, pointer, or
 floating-point type whose bit width is a power of two greater than or equal to
 eight and less than or equal to a target-specific size limit.  ``align`` must be
-explicitly specified on atomic stores, and the store has undefined behavior if
-the alignment is not set to a value which is at least the size in bytes of the
-pointee. ``!nontemporal`` does not have any defined semantics for atomic stores.
+explicitly specified on atomic stores. Note: if the alignment is not greater or
+equal to the size of the `<value>` type, the atomic operation is likely to
+require a lock and have poor performance. ``!nontemporal`` does not have any
+defined semantics for atomic stores.
 
 The optional constant ``align`` argument specifies the alignment of the
 operation (that is, the alignment of the memory address). It is the
@@ -10807,8 +10817,9 @@ must be at least ``monotonic``, the failure ordering cannot be either
 A ``cmpxchg`` instruction can also take an optional
 ":ref:`syncscope <syncscope>`" argument.
 
-The alignment must be a power of two greater or equal to the size of the
-`<value>` type.
+Note: if the alignment is not greater or equal to the size of the `<value>`
+type, the atomic operation is likely to require a lock and have poor
+performance.
 
 The alignment is only optional when parsing textual IR; for in-memory IR, it is
 always present. If unspecified, the alignment is assumed to be equal to the
@@ -10910,8 +10921,9 @@ the ``atomicrmw`` is marked as ``volatile``, then the optimizer is not
 allowed to modify the number or order of execution of this
 ``atomicrmw`` with other :ref:`volatile operations <volatile>`.
 
-The alignment must be a power of two greater or equal to the size of the
-`<value>` type.
+Note: if the alignment is not greater or equal to the size of the `<value>`
+type, the atomic operation is likely to require a lock and have poor
+performance.
 
 The alignment is only optional when parsing textual IR; for in-memory IR, it is
 always present. If unspecified, the alignment is assumed to be equal to the
@@ -12246,7 +12258,7 @@ This instruction requires several arguments:
    #. Arguments with the :ref:`inalloca <attr_inalloca>` or
       :ref:`preallocated <attr_preallocated>` attribute are forwarded in place.
    #. If the musttail call appears in a function with the ``"thunk"`` attribute
-      and the caller and callee both have varargs, than any unprototyped
+      and the caller and callee both have varargs, then any unprototyped
       arguments in register or memory are forwarded to the callee. Similarly,
       the return value of the callee is returned to the caller's caller, even
       if a void return type is in use.
@@ -15747,7 +15759,11 @@ Semantics:
 """"""""""
 
 This function returns the same values as the libm ``rint`` functions
-would, and handles error conditions in the same way.
+would, and handles error conditions in the same way. Since LLVM assumes the
+:ref:`default floating-point environment <floatenv>`, the rounding mode is
+assumed to be set to "nearest", so halfway cases are rounded to the even
+integer. Use :ref:`Constrained Floating-Point Intrinsics <constrainedfp>`
+to avoid that assumption.
 
 .. _int_nearbyint:
 
@@ -15785,7 +15801,11 @@ Semantics:
 """"""""""
 
 This function returns the same values as the libm ``nearbyint``
-functions would, and handles error conditions in the same way.
+functions would, and handles error conditions in the same way. Since LLVM
+assumes the :ref:`default floating-point environment <floatenv>`, the rounding
+mode is assumed to be set to "nearest", so halfway cases are rounded to the even
+integer. Use :ref:`Constrained Floating-Point Intrinsics <constrainedfp>` to
+avoid that assumption.
 
 .. _int_round:
 
@@ -27212,9 +27232,6 @@ obviously not constant. However, a call like
 ``llvm.is.constant.i32(i32 %param)`` *can* return true after the
 function is inlined, if the value passed to the function parameter was
 a constant.
-
-On the other hand, if constant folding is not run, it will never
-evaluate to true, even in simple cases.
 
 .. _int_ptrmask:
 

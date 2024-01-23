@@ -1,7 +1,5 @@
 // RUN: mlir-opt %s -split-input-file -verify-diagnostics
 
-// -----
-
 func.func @broadcast_to_scalar(%arg0: f32) -> f32 {
   // expected-error@+1 {{custom op 'vector.broadcast' invalid kind of type specified}}
   %0 = vector.broadcast %arg0 : f32 to f32
@@ -386,6 +384,15 @@ func.func @test_vector.transfer_read(%arg0: memref<?x?xf32>) {
 func.func @test_vector.transfer_read(%arg0: memref<?x?xf32>) {
   %c3 = arith.constant 3 : index
   %cst = arith.constant 3.0 : f32
+  // expected-error@+1 {{requires 2 indices}}
+  %0 = vector.transfer_read %arg0[%c3], %cst { permutation_map = affine_map<()->(0)> } : memref<?x?xf32>, vector<128xf32>
+}
+
+// -----
+
+func.func @test_vector.transfer_read(%arg0: memref<?x?xf32>) {
+  %c3 = arith.constant 3 : index
+  %cst = arith.constant 3.0 : f32
   // expected-error@+1 {{requires a permutation_map with input dims of the same rank as the source type}}
   %0 = vector.transfer_read %arg0[%c3, %c3], %cst {permutation_map = affine_map<(d0)->(d0)>} : memref<?x?xf32>, vector<128xf32>
 }
@@ -534,6 +541,15 @@ func.func @test_vector.transfer_write(%arg0: memref<?x?xf32>) {
   %cst = arith.constant dense<3.0> : vector<128 x f32>
   // expected-error@+1 {{requires 2 indices}}
   vector.transfer_write %cst, %arg0[%c3, %c3, %c3] {permutation_map = affine_map<()->(0)>} : vector<128xf32>, memref<?x?xf32>
+}
+
+// -----
+
+func.func @test_vector.transfer_write(%arg0: memref<?x?xf32>) {
+  %c3 = arith.constant 3 : index
+  %cst = arith.constant dense<3.0> : vector<128 x f32>
+  // expected-error@+1 {{requires 2 indices}}
+  vector.transfer_write %cst, %arg0[%c3] {permutation_map = affine_map<()->(0)>} : vector<128xf32>, memref<?x?xf32>
 }
 
 // -----
@@ -1733,4 +1749,28 @@ func.func @integer_vector_contract(%arg0: vector<16x32xsi8>, %arg1: vector<32x16
     iterator_types = ["parallel", "parallel", "reduction"], kind = #vector.kind<add>
   } %arg0, %arg1, %arg2 : vector<16x32xsi8>, vector<32x16xsi8> into vector<16x16xsi32>
   return %0: vector<16x16xsi32>
+}
+
+// -----
+
+func.func @invalid_outerproduct(%src : memref<?xf32>) {
+  %idx = arith.constant 0 : index
+  %0 = vector.load %src[%idx] : memref<?xf32>, vector<[4]xf32>
+  %1 = vector.load %src[%idx] : memref<?xf32>, vector<4xf32>
+
+  // expected-error @+1 {{expected either both or only #2 operand dim to be scalable}}
+  %op = vector.outerproduct %0, %1 : vector<[4]xf32>, vector<4xf32>
+
+  return
+}
+
+// -----
+
+func.func @invalid_outerproduct1(%src : memref<?xf32>) {
+  %idx = arith.constant 0 : index
+  %0 = vector.load %src[%idx] : memref<?xf32>, vector<[4]x[4]xf32>
+  %1 = vector.load %src[%idx] : memref<?xf32>, vector<[4]xf32>
+
+  // expected-error @+1 {{'vector.outerproduct' op expected 1-d vector for operand #1}}
+  %op = vector.outerproduct %0, %1 : vector<[4]x[4]xf32>, vector<[4]xf32>
 }
