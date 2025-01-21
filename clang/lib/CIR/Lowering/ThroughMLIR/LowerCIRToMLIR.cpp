@@ -1455,12 +1455,16 @@ mlir::TypeConverter prepareTypeConverter(mlir::DataLayout &dataLayout) {
     }
     }
 
-    // Struct has a name: lower as an identified struct.
-    mlir::TupleType tuple;
+    // Lower the struct-like type to an array of the same size
+    llvm::errs() << type << " has size " << dataLayout.getTypeSize(type)
+                 << '\n';
+    auto byteSize = dataLayout.getTypeSize(type);
+    SmallVector<int64_t> shape{static_cast<long>(byteSize)};
+    auto array = mlir::MemRefType::get(shape, mlir::IntegerType::get(type.getContext(), 8));
     // FIXME(cir): all the following has to be somehow kept. With some
     // attributes?
-    tuple = mlir::TupleType::get(type.getContext(), mlirMembers);
-    return tuple;
+    // FIXME(cir): need to deal with alignment somehow
+    return array;
   });
 
   return converter;
